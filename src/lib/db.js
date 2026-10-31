@@ -15,6 +15,8 @@ const KEYS = {
 export const DEFAULT_SETTINGS = {
   geminiKey: '',                 // FREE: aistudio.google.com/apikey (Google account se)
   hfToken: '',                   // optional FREE: huggingface.co token -> try-on ki daily limit badhti hai
+  groqKey: '',                   // optional FREE backup AI (open-source Qwen): console.groq.com/keys
+  openrouterKey: '',             // optional FREE backup AI (open-source Gemma etc.): openrouter.ai/keys
   textModel: 'gemini-3.8-flash', // free-tier model; limit khatam ho toh ai.js khud doosre free models try karta hai
 }
 

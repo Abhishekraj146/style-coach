@@ -1,4 +1,4 @@
-// FREE AI "dimaag": Google Gemini ke free-tier models (Google AI Studio ki free key).
+// FREE AI "dimaag": Google Gemini free tier + open-source backup (Groq: Qwen, OpenRouter: Gemma/Nemotron).
 // Kaam: kapdo ko pehchanna, combos banana, photo/scene analyze karna.
 // claude.js (paid) jaisa hi hai: same functions, same JSON shape -> screens ko kuch pata nahi chalta ki AI badla.
 import { z } from 'zod'
@@ -68,37 +68,111 @@ async function callModel(key, model, system, content, schema) {
   return { text: extractText(json) }
 }
 
-// Saare AI calls isi se jaate hain. Naam purana (askClaude jaisa) taaki neeche ka code same rahe.
+// ---------- Open-source backup: Groq (Qwen) aur OpenRouter (Gemma / Nemotron) ----------
+// Dono "OpenAI jaisa" format samajhte hain. JSON ka shape prompt mein likh ke bhejte hain, phir zod se check.
+const GROQ = { url: 'https://api.groq.com/openai/v1/chat/completions', models: ['qwen/qwen3.8-27b'], maxImages: 3 }
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
+
+// OpenRouter ke free models badalte rehte hain, isliye live list se chunte hain (photo samajhne wale + JSON dene wale)
+let orModels = null
+async function openRouterFreeVisionModels() {
+  if (orModels) return orModels
+  try {
+    const { data } = await (await fetch('https://openrouter.ai/api/v1/models')).json()
+    const ok = data.filter(
+      (m) => m.id.endsWith(':free') && m.architecture?.input_modalities?.includes('image') &&
+        m.supported_parameters?.includes('response_format') && !/safety|guard/i.test(m.id),
+    )
+    const rank = (id) => (/gemma/.test(id) ? 0 : /nemotron/.test(id) ? 1 : 2) // open-source pehle
+    orModels = ok.map((m) => m.id).sort((a, b) => rank(a) - rank(b)).slice(0, 3)
+  } catch {
+    orModels = ['google/gemma-4-31b-it:free']
+  }
+  return orModels
+}
+
+async function callOpenAICompat(url, key, model, system, content, schema, maxImages = 10) {
+  const parts = []
+  let imgs = 0
+  for (const c of content) {
+    if (c.type === 'text') parts.push({ type: 'text', text: c.text })
+    else if (imgs++ < maxImages) parts.push({ type: 'image_url', image_url: { url: `data:${c.source.media_type};base64,${c.source.data}` } })
+  }
+  const sys = system + '\n\nReply with ONLY one JSON object (no markdown, no extra text) that matches this JSON schema exactly:\n' + JSON.stringify(toGeminiSchema(schema))
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model, messages: [{ role: 'system', content: sys }, { role: 'user', content: parts }], response_format: { type: 'json_object' } }),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) return { error: { status: res.status, message: json?.error?.message || res.statusText || 'unknown error' } }
+  return { text: json.choices?.[0]?.message?.content || '' }
+}
+
+// Kabhi model JSON ko ```json ... ``` mein lapet deta hai, woh hatao
+const cleanJson = (t) => t.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
+
+// Saare AI calls isi se jaate hain. Order: Gemini (sabse achha) -> Groq -> OpenRouter.
+// Jis service ki key Settings mein hai wahi try hoti hai. Ek fail / limit khatam -> agli.
 async function askAI({ system, content, schema }) {
   const s = await loadSettings()
-  if (!s.geminiKey) throw new Error('Free AI key nahi daali. Me → Settings mein Gemini key daalo (aistudio.google.com se free milti hai).')
-  const models = [...new Set([s.textModel, ...FREE_MODELS].filter(Boolean))]
-  let lastMsg = ''
-  for (const model of models) {
+  const tries = []
+  if (s.geminiKey) {
+    for (const m of new Set([s.textModel, ...FREE_MODELS].filter(Boolean))) {
+      tries.push({ service: 'Gemini', name: m, run: () => callModel(s.geminiKey, m, system, content, schema) })
+    }
+  }
+  if (s.groqKey) {
+    for (const m of GROQ.models) {
+      tries.push({ service: 'Groq', name: m, run: () => callOpenAICompat(GROQ.url, s.groqKey, m, system, content, schema, GROQ.maxImages) })
+    }
+  }
+  if (s.openrouterKey) {
+    for (const m of await openRouterFreeVisionModels()) {
+      tries.push({ service: 'OpenRouter', name: m, run: () => callOpenAICompat(OPENROUTER_URL, s.openrouterKey, m, system, content, schema) })
+    }
+  }
+  if (!tries.length) throw new Error('Koi AI key nahi daali. Me → Settings mein kam se kam ek FREE key daalo (Gemini sabse achha).')
+
+  const errors = []
+  const badKey = new Set()
+  for (const t of tries) {
+    if (badKey.has(t.service)) continue // galat key hai toh us service ke baaki models try karna bekaar
     let r
     try {
-      r = await callModel(s.geminiKey, model, system, content, schema)
+      r = await t.run()
     } catch {
-      throw new Error('Internet / connection problem. Network check karo.')
+      errors.push({ t, kind: 'network' })
+      continue
     }
     if (r.error) {
       const { status, message } = r.error
-      if (/API key/i.test(message)) throw new Error('Gemini key galat hai. Me → Settings check karo.')
-      lastMsg = `${model}: ${message}`
-      // 429 = is model ki free limit khatam, 404/400 = model nahi mila -> agla model try karo
-      if (status === 429 || status === 404 || status === 400 || status >= 500) continue
-      throw new Error(`AI error ${status}: ${message}`)
+      if (status === 401 || status === 403 || /API key/i.test(message)) {
+        badKey.add(t.service)
+        errors.push({ t, kind: 'key' })
+      } else {
+        // 429 = free limit khatam, 404/400 = model nahi mila, 5xx = server down -> sab mein agla try karo
+        errors.push({ t, kind: status === 429 || /quota|exhaust|rate/i.test(message) ? 'limit' : 'other', msg: `${status} ${message}`.slice(0, 120) })
+      }
+      continue
     }
     try {
-      const parsed = schema.safeParse(JSON.parse(r.text))
+      const parsed = schema.safeParse(JSON.parse(cleanJson(r.text)))
       if (parsed.success) return parsed.data
-      lastMsg = `${model}: jawab ka format galat tha`
+      errors.push({ t, kind: 'format' })
     } catch {
-      lastMsg = `${model}: jawab JSON nahi tha`
+      errors.push({ t, kind: 'format' })
     }
   }
-  if (/429|quota|exhaust/i.test(lastMsg)) throw new Error('Aaj ki free AI limit khatam ho gayi. Thodi der baad (ya kal) try karo.')
-  throw new Error('AI se sahi jawab nahi aaya. Dobara try karo. (' + lastMsg + ')')
+
+  if (errors.every((e) => e.kind === 'network')) throw new Error('Internet / connection problem. Network check karo.')
+  const keys = [...badKey]
+  if (keys.length && errors.every((e) => e.kind === 'key')) throw new Error(`${keys.join(', ')} key galat hai. Me → Settings check karo.`)
+  if (errors.every((e) => e.kind === 'limit' || e.kind === 'key')) {
+    throw new Error('Aaj ki free AI limit khatam ho gayi.' + (s.groqKey && s.openrouterKey ? ' Thodi der baad (ya kal) try karo.' : ' Me → Settings mein ek aur free key (Groq / OpenRouter) daaloge toh backup milega.'))
+  }
+  const summary = errors.map((e) => `${e.t.service} ${e.t.name}: ${e.kind === 'key' ? 'key galat' : e.msg || e.kind}`).join(' | ')
+  throw new Error('AI se sahi jawab nahi aaya. Dobara try karo. (' + summary + ')')
 }
 
 // ---------- Fashion ka base knowledge (har styling call mein jaata hai) ----------

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { ErrorText, Spinner, Lesson, List, Sheet } from '../components'
 import { wardrobeDb, outfitsDb, loadProfile, newId, saveLesson } from '../lib/db'
 import { suggestOutfits } from '../lib/ai'
-import { tryOn, pickUpperGarment } from '../lib/tryon'
+import { tryOn, pickUpperGarment, pickGarment } from '../lib/tryon'
 import { todayWeather } from '../lib/weather'
 
 const OCCASIONS = ['College', 'Date', 'Party / club', 'Wedding / festive', 'Office / interview', 'Casual outing', 'Travel', 'Family function']
@@ -50,18 +50,22 @@ export default function Outfits({ goTo }) {
     }
   }
 
-  async function doTryOn(i, outfit) {
+  // part 'upper' = tumhari photo pe top. part 'lower' = top wali result photo pe pant (poora outfit).
+  async function doTryOn(i, outfit, part = 'upper') {
     if (!profile.photo) { setTryState((s) => ({ ...s, [i]: { error: 'Pehle "Me" tab mein apni full-body photo daalo.' } })); return }
-    setTryState((s) => ({ ...s, [i]: { loading: 'Shuru kar rahe hain…' } }))
+    const base = part === 'lower' ? tryState[i]?.image || profile.photo : profile.photo
+    const patch = (p) => setTryState((s) => ({ ...s, [i]: { ...s[i], ...p } }))
+    patch({ loading: 'Shuru kar rahe hain…', error: null })
     try {
       const { image } = await tryOn({
-        personPhoto: profile.photo,
+        personPhoto: base,
         items: outfit.item_ids.map((id) => byId[id]),
-        onStatus: (msg) => setTryState((s) => ({ ...s, [i]: { loading: msg } })), // live progress
+        part,
+        onStatus: (msg) => patch({ loading: msg }), // live progress
       })
-      setTryState((s) => ({ ...s, [i]: { image } }))
+      patch({ image, loading: null, lowerDone: part === 'lower', saved: false })
     } catch (e) {
-      setTryState((s) => ({ ...s, [i]: { error: e.message } }))
+      patch({ loading: null, error: e.message })
     }
   }
 
@@ -127,10 +131,13 @@ export default function Outfits({ goTo }) {
               <ErrorText error={tryState[i]?.error} />
               {(() => {
                 const g = pickUpperGarment(o.item_ids.map((id) => byId[id]))
-                return g ? <p className="muted small">🪞 Free try-on sirf upper body ka: "{g.tags.name}" tum pe pehna ke dikhayega.</p> : null
+                return g ? <p className="muted small">🪞 Free try-on pehle "{g.tags.name}" pehnayega, phir chaaho toh pant bhi.</p> : null
               })()}
               <div className="row">
                 <button className="btn btn-ghost" disabled={!!tryState[i]?.loading} onClick={() => doTryOn(i, o)}>🪞 {tryState[i]?.image ? 'Dobara try-on' : 'Mujh pe try karo'}</button>
+                {tryState[i]?.image && !tryState[i]?.lowerDone && pickGarment(o.item_ids.map((id) => byId[id]), 'lower') && (
+                  <button className="btn btn-ghost" disabled={!!tryState[i]?.loading} onClick={() => doTryOn(i, o, 'lower')}>👖 Pant bhi pehnao</button>
+                )}
                 <button className="btn btn-ghost" disabled={tryState[i]?.saved} onClick={() => save(i, o)}>{tryState[i]?.saved ? '✓ Saved' : '💾 Save'}</button>
               </div>
             </div>

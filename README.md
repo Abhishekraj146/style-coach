@@ -7,8 +7,8 @@ Personal app jo 2 kaam karta hai, **poora free**:
 ## Free cheezein jo use hoti hain
 | Kaam | Kya use hota hai | Kharcha |
 |---|---|---|
-| AI analysis (tagging, combos, review) | Google Gemini free tier (Flash models) | Free key: [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
-| Virtual try-on | Open-source IDM-VTON (Hugging Face) | Free. Optional free token: [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) |
+| AI analysis (tagging, combos, review) | Google Gemini free tier → backup: Groq (open-source Qwen) → OpenRouter (open-source Gemma etc.) | Free keys: [Gemini](https://aistudio.google.com/apikey), [Groq](https://console.groq.com/keys), [OpenRouter](https://openrouter.ai/keys) |
+| Virtual try-on | Open-source IDM-VTON → Leffa (Hugging Face). Top + pant | Free, roz ki limit (saare servers ki ek). Free token se zyada: [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) |
 | Pose camera | MediaPipe, phone ke andar | Free, offline |
 | Mausam | Open-Meteo | Free, bina key |
 | Hosting | GitHub Pages | Free |
@@ -41,8 +41,8 @@ src/
     Photos.jsx        kheenchi photos ka review + pasand ki photos (taste profile, custom poses)
     Me.jsx            meri photo, style profile, keys, seekh (lessons), 💾 backup/restore
   lib/
-    ai.js             FREE AI (Gemini free tier) + fashion/photo ka "knowledge" (prompts)
-    tryon.js          FREE try-on (IDM-VTON, Hugging Face)
+    ai.js             FREE AI chain (Gemini → Groq → OpenRouter) + fashion/photo ka "knowledge" (prompts)
+    tryon.js          FREE try-on chain (IDM-VTON → Leffa; pant ke liye Leffa)
     weather.js        aaj ka mausam (Open-Meteo)
     voice.js          phone ki awaaz mein bolna
     db.js             phone ke andar storage (IndexedDB) + backup/restore
