@@ -93,13 +93,13 @@ export function drawFigure(ctx, W, H, pose, color = '#ffffff', alpha = 0.9) {
   ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(off, 0, 0); ctx.restore()
 }
 
-// Asli photo wala pose: photo ke insaan ki outline (PNG) ko frame mein fit karo
-export function drawPhotoOverlay(ctx, W, H, overlay, img, framing, alpha = 0.85) {
-  const target = framing === 'full' ? { top: 0.08, bottom: 0.92 } : framing === 'close' ? { top: 0.12, bottom: 1.0 } : { top: 0.1, bottom: 1.0 }
-  const h = (target.bottom - target.top) * H
-  const w = h * (overlay.w / overlay.h)
+// Asli photo wala pose: POORI photo halki (kam opacity) karke camera ke upar.
+// "contain" fit: photo kati nahi jaati, toh photo mein banda jahan khada hai wahi framing tum bhi copy kar sakte ho.
+export function drawPhotoGhost(ctx, W, H, img, alpha = 0.4) {
+  const s = Math.min(W / img.naturalWidth, H / img.naturalHeight)
+  const w = img.naturalWidth * s, h = img.naturalHeight * s
   ctx.save(); ctx.globalAlpha = alpha
-  ctx.drawImage(img, W / 2 - w / 2, target.top * H, w, h)
+  ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h)
   ctx.restore()
 }
 

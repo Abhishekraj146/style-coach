@@ -50,7 +50,9 @@ src/
     poseDetector.js   MediaPipe: body ke 33 points dhoondna (offline)
     poses.js          pose ki geometry: live compare, hints, selfie hand check
     poseLibrary.js    51 original poses (front + back camera), categories
-    silhouette.js     pose ko insaan jaisi outline mein draw karna + thumbnails
+    silhouette.js     pose overlay: asli photo halki (opacity) + fallback outline + thumbnails
+    pexels.js         asli pose photos search (free Pexels key)
+    references.js     photo -> pose (Photos tab + Camera dono use karte hain)
     claude.js         (purana, paid: ab use nahi hota)
     gemini.js         (purana, paid try-on: ab use nahi hota)
 public/

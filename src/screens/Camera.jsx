@@ -5,11 +5,13 @@ import { useEffect, useRef, useState } from 'react'
 import { getVideoLandmarker } from '../lib/poseDetector'
 import { PRESET_POSES, FRAMING_TIPS, BONES, namedPoints, comparePose, framingHints } from '../lib/poses'
 import { CATEGORIES } from '../lib/poseLibrary'
-import { drawFigure, drawPhotoOverlay, poseThumb } from '../lib/silhouette'
+import { drawFigure, drawPhotoGhost, poseThumb } from '../lib/silhouette'
 import { referencesDb, loadTaste, photosDb, newId, saveLesson } from '../lib/db'
 import { analyzeScene } from '../lib/ai'
 import { speak } from '../lib/voice'
-import { Spinner, ErrorText, Sheet, List, Lesson } from '../components'
+import { Spinner, ErrorText, Sheet, List, Lesson, ImageButton } from '../components'
+import { searchPosePhotos, downloadPhoto, POSE_SEARCHES } from '../lib/pexels'
+import { addReferencePhotos } from '../lib/references'
 
 // Score limits: sahi pose ~95+ aata hai, milta-julta pose ~75-85. Isliye "Perfect" 90 se.
 const GOOD = 90
@@ -39,6 +41,9 @@ export default function Camera({ goTo }) {
   const [autoOn, setAutoOn] = useState(false) // 🤖 pose match hote hi khud photo
   const [countdown, setCountdown] = useState(null)
   const coachRef = useRef({ since: 0, busy: false, lastText: '', lastAt: 0 })
+  const [opacity, setOpacity] = useState(0.4) // photo overlay kitni dikhe
+  const opacityRef = useRef(0.4)
+  opacityRef.current = opacity
 
   poseRef.current = pose
   const mirror = facing === 'user'
@@ -55,22 +60,58 @@ export default function Camera({ goTo }) {
     if (!toFront && pose.camera === 'front') setPose(allPoses.find((p) => p.id === 'p-classic'))
   }
 
-  // Pasand ki photos se bane custom poses bhi list mein jodo
-  useEffect(() => {
-    referencesDb.load().then((refs) => {
-      const custom = refs.filter((r) => r.pose).map((r, i) => {
-        let outlineImg = null
-        if (r.pose.outline) { outlineImg = new Image(); outlineImg.src = r.pose.outline.src } // pehle se load
-        return {
-          id: r.id, name: `Meri pasand #${refs.length - i}`, cat: 'mine', camera: 'any', framing: r.pose.framing, angles: r.pose.angles,
-          tip: 'Tumhari pasand ki photo wala pose. Screen pe usi insaan ki outline hai: usme fit ho jao.', thumb: r.image,
-          outline: r.pose.outline, outlineImg,
-        }
-      })
-      setAllPoses([...custom, ...PRESET_POSES])
+  // Pasand ki photos (apni ya Pexels se) = asli photo wale poses. Inko list mein sabse upar rakho.
+  async function loadCustomPoses(selectId) {
+    const refs = await referencesDb.load()
+    const custom = refs.filter((r) => r.pose).map((r, i) => {
+      const photoImg = new Image() // asli photo hi overlay banegi (halki opacity pe)
+      photoImg.src = r.image
+      return {
+        id: r.id, name: `Photo pose #${refs.length - i}`, cat: 'mine', camera: 'any', framing: r.pose.framing, angles: r.pose.angles,
+        tip: 'Asli photo halki dikh rahi hai: usi jagah khade ho, usi pose mein aao, phir click.', thumb: r.image,
+        photoImg, credit: r.credit,
+      }
     })
+    const all = [...custom, ...PRESET_POSES]
+    setAllPoses(all)
+    if (selectId) setPose(all.find((p) => p.id === selectId) || all[0])
+  }
+  useEffect(() => {
+    loadCustomPoses()
     loadTaste().then(setTaste)
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---------- Pose photo search (Pexels) ----------
+  const [search, setSearch] = useState({ q: '', results: [], loading: false, error: null, adding: null })
+  async function runSearch(q) {
+    setSearch((s) => ({ ...s, q, loading: true, error: null, results: [] }))
+    try {
+      const { photos } = await searchPosePhotos(q)
+      setSearch((s) => ({ ...s, loading: false, results: photos }))
+    } catch (e) {
+      setSearch((s) => ({ ...s, loading: false, error: e.message }))
+    }
+  }
+  async function usePhoto(photo) {
+    setSearch((s) => ({ ...s, adding: photo.id, error: null }))
+    try {
+      const image = await downloadPhoto(photo.large)
+      const { found, lastId } = await addReferencePhotos([image], photo.credit)
+      if (!found) throw new Error('Is photo mein body ka pose nahi mila. Doosri photo chuno (poora insaan saaf dikhe).')
+      await loadCustomPoses(lastId)
+      setPicker(false)
+    } catch (e) {
+      setSearch((s) => ({ ...s, error: e.message }))
+    }
+    setSearch((s) => ({ ...s, adding: null }))
+  }
+  async function addOwnPhotos(urls) {
+    setSearch((s) => ({ ...s, adding: 'own', error: null }))
+    const { found, lastId } = await addReferencePhotos(urls)
+    if (!found) setSearch((s) => ({ ...s, error: 'Photo mein body ka pose nahi mila. Aisi photo do jisme insaan saaf dikhe.' }))
+    else { await loadCustomPoses(lastId); setPicker(false) }
+    setSearch((s) => ({ ...s, adding: null }))
+  }
 
   // Voice coach + auto-capture: live score har ~250ms update hota hai, uspe react karo
   useEffect(() => {
@@ -150,7 +191,7 @@ export default function Camera({ goTo }) {
           const pts = lm ? namedPoints(toDisplay(lm, video, W, H), W, H, mirror) : null
           const p = poseRef.current
           const result = pts ? comparePose(pts, p.angles, p.framing) : null
-          draw(canvas.getContext('2d'), W, H, p, pts, result?.score ?? 0)
+          draw(canvas.getContext('2d'), W, H, p, pts, result?.score ?? 0, opacityRef.current)
 
           // UI (React state) ko 4 baar/sec update karo, har frame pe nahi: warna phone garam + slow
           const now = performance.now()
@@ -250,6 +291,14 @@ export default function Camera({ goTo }) {
           </button>
           <button className="round" onClick={() => step(1)} aria-label="Agla pose">▶</button>
         </div>
+        {pose.photoImg && (
+          <label className="opacity-row">
+            Photo overlay
+            <input type="range" min="0.15" max="0.8" step="0.05" value={opacity} onChange={(e) => setOpacity(+e.target.value)} />
+            {Math.round(opacity * 100)}%
+          </label>
+        )}
+        {pose.credit && <p className="small muted" style={{ margin: 0 }}>📷 Photo: <a href={pose.credit.url} target="_blank" rel="noreferrer">{pose.credit.name}</a> / Pexels</p>}
         <p className="small pose-tip">🧍 {pose.tip}<br />{FRAMING_TIPS[pose.framing]}</p>
         <div className="chips">
           <button className={'chip' + (voiceOn ? ' active' : '')} onClick={() => { setVoiceOn((v) => !v); speak(voiceOn ? '' : 'Voice coach on') }}>🔊 Voice coach</button>
@@ -270,6 +319,34 @@ export default function Camera({ goTo }) {
       {picker && (
         <Sheet onClose={() => setPicker(false)}>
           <h2>Pose chuno <small className="muted">({poses.length})</small></h2>
+
+          <div className="pose-search">
+            <b>🔍 Asli photo se pose (free, Pexels)</b>
+            <form className="row" onSubmit={(e) => { e.preventDefault(); if (search.q.trim()) runSearch(search.q.trim()) }}>
+              <input className="input" style={{ flex: 1 }} placeholder="e.g. street pose, wedding kurta pose…" value={search.q} onChange={(e) => setSearch((s) => ({ ...s, q: e.target.value }))} />
+              <button className="btn btn-sm" type="submit">Dhoondo</button>
+            </form>
+            <div className="chips">
+              {POSE_SEARCHES.map((x) => <button key={x.label} className="chip" onClick={() => runSearch(x.q)}>{x.label}</button>)}
+              <ImageButton label="＋ Apni photo" multiple onImages={addOwnPhotos} className="chip" />
+            </div>
+            {search.loading && <Spinner text="Photos dhoondh rahe hain…" />}
+            {search.adding && <Spinner text="Photo se pose bana rahe hain…" />}
+            <ErrorText error={search.error} />
+            {search.results.length > 0 && (
+              <div className="pose-grid">
+                {search.results.map((ph) => (
+                  <button key={ph.id} className="pose-tile" disabled={!!search.adding} onClick={() => usePhoto(ph)}>
+                    <img src={ph.thumb} alt={ph.alt || ''} loading="lazy" />
+                    <span>📷 {ph.credit.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {search.results.length > 0 && <p className="muted small">Photos <a href="https://www.pexels.com" target="_blank" rel="noreferrer">Pexels</a> se (free license). Tap karo = camera pe overlay.</p>}
+          </div>
+
+          <b>Ya ready poses:</b>
           <div className="chips">
             {[{ id: 'all', label: 'Sab' }, ...(poses.some((p) => p.cat === 'mine') ? [{ id: 'mine', label: '⭐ Meri pasand' }] : []), ...CATEGORIES]
               .filter((c) => c.id === 'all' || poses.some((p) => p.cat === c.id))
@@ -315,11 +392,11 @@ function toDisplay(lm, video, W, H) {
   return lm.map((p) => ({ ...p, x: (p.x * vw * s + offX) / W, y: (p.y * vh * s + offY) / H }))
 }
 
-function draw(ctx, W, H, pose, pts, score) {
+function draw(ctx, W, H, pose, pts, score, opacity) {
   ctx.clearRect(0, 0, W, H)
   // 1. Target pose: photo wala ho toh us insaan ki asli outline, warna body silhouette.
   //    Pose match hote hi outline hari ho jaati hai.
-  if (pose.outline && pose.outlineImg?.complete) drawPhotoOverlay(ctx, W, H, pose.outline, pose.outlineImg, pose.framing)
+  if (pose.photoImg?.complete) drawPhotoGhost(ctx, W, H, pose.photoImg, opacity)
   else drawFigure(ctx, W, H, pose, score >= GOOD ? '#3ddc84' : '#ffffff', 0.85)
 
   // 2. Live skeleton (tum): patli lines, colour score ke hisaab se

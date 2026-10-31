@@ -133,6 +133,9 @@ export default function Me() {
           <label>OpenRouter key (optional backup, FREE) <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">→ yahan se lo</a></label>
           <input className="input" type="password" value={settings.openrouterKey} onChange={(e) => setSettings({ ...settings, openrouterKey: e.target.value.trim() })} placeholder="sk-or-..." />
           <p className="muted small">Gemini ki free limit khatam ho jaaye toh app apne aap inke open-source models (Qwen, Gemma) pe chala jaata hai. Ek bhi daalo toh backup ready.</p>
+          <label>Pexels key (pose photos, FREE) <a href="https://www.pexels.com/api/" target="_blank" rel="noreferrer">→ yahan se lo</a></label>
+          <input className="input" type="password" value={settings.pexelsKey} onChange={(e) => setSettings({ ...settings, pexelsKey: e.target.value.trim() })} placeholder="Pexels API key" />
+          <p className="muted small">Camera → pose sheet → 🔍 se hazaaron asli pose photos search karke overlay kar sakte ho.</p>
           <details>
             <summary className="small">Advanced: AI model</summary>
             <label>Free text model (pehle yeh try hoga)</label>

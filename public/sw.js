@@ -3,7 +3,7 @@
 //  - App ki apni files: pehle internet se (naya version mile), na mile toh cache se.
 //  - Pose AI ki badi files (MediaPipe wasm/model, CDN se): cache se (ek baar download, hamesha ke liye).
 //  - AI calls (Gemini, Hugging Face): kabhi cache nahi (har baar fresh jawab chahiye).
-const CACHE = 'style-coach-v4'
+const CACHE = 'style-coach-v5'
 const HEAVY = ['cdn.jsdelivr.net/npm/@mediapipe', 'storage.googleapis.com/mediapipe-models']
 
 // Install ke waqt hi app ki saari files cache karo. Pehli baar page khulte waqt SW abhi ready nahi hota,

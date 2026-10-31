@@ -17,6 +17,7 @@ export const DEFAULT_SETTINGS = {
   hfToken: '',                   // optional FREE: huggingface.co token -> try-on ki daily limit badhti hai
   groqKey: '',                   // optional FREE backup AI (open-source Qwen): console.groq.com/keys
   openrouterKey: '',             // optional FREE backup AI (open-source Gemma etc.): openrouter.ai/keys
+  pexelsKey: '',                 // optional FREE: asli pose photos search (pexels.com/api)
   textModel: 'gemini-3.8-flash', // free-tier model; limit khatam ho toh ai.js khud doosre free models try karta hai
 }
 
