@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { ImageButton, Sheet, ErrorText, Spinner } from '../components'
 import { wardrobeDb, newId } from '../lib/db'
-import { tagClothing } from '../lib/claude'
+import { tagClothing } from '../lib/ai'
 
 const FILTERS = ['all', 'top', 'bottom', 'outerwear', 'footwear', 'ethnic', 'accessory']
 

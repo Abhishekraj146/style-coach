@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { ImageButton, Spinner, ErrorText, Sheet, List, Lesson } from '../components'
 import { referencesDb, photosDb, loadTaste, saveTaste, newId, saveLesson } from '../lib/db'
-import { buildTasteProfile, reviewPhoto } from '../lib/claude'
+import { buildTasteProfile, reviewPhoto } from '../lib/ai'
 import { detectPoseInImage } from '../lib/poseDetector'
 import { poseFromLandmarks } from '../lib/poses'
 import { loadImage, dataUrlToBlob } from '../lib/image'

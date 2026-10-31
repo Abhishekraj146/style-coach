@@ -11,7 +11,11 @@
       "PowerShell(npm ls --depth=0)",
       "PowerShell(npm install react 2>&1)",
       "Bash(cd \"/d/personal guide app[/node_modules/@anthropic-ai/sdk\" && ls helpers* 2>/dev/null | head; grep -rl \"dangerouslyAllowBrowser\" --include=*.d.ts . | head -3; grep -n \"parse\" resources/beta/messages/messages.d.ts | head -10; grep -rn \"fallbacks\" --include=*.d.ts resources/beta/messages/messages.d.ts | head -5; grep -n \"zod\" package.json | head; ls ../../@mediapipe/tasks-vision/ | head; ls ../../@mediapipe/tasks-vision/wasm)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "WebFetch(domain:huggingface.co)",
+      "Bash(curl -s -m 30 https://yisol-idm-vton.hf.space/info)",
+      "Bash(curl -s -m 20 https://yisol-idm-vton.hf.space/config)",
+      "Bash(python -c \"import sys,json; c=json.load\\(sys.stdin\\); print\\(c.get\\('version'\\)\\); print\\([ \\(d.get\\('api_name'\\), d.get\\('id'\\)\\) for d in c.get\\('dependencies',[]\\) if d.get\\('api_name'\\)]\\)\")"
     ]
   }
 }

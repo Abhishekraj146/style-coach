@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "pages-sim",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "4321", "--directory", "C:/Users/abhis/AppData/Local/Temp/claude/D--personal-guide-app-/31555e92-6ab6-413b-97cd-f91b42da52ca/scratchpad/site"],
+      "port": 4321
     }
   ]
 }

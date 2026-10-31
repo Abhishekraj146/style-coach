@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from 'react'
 import { getVideoLandmarker } from '../lib/poseDetector'
 import { PRESET_POSES, FRAMING_TIPS, BONES, skeletonFromAngles, fitSkeleton, namedPoints, comparePose, framingHints } from '../lib/poses'
 import { referencesDb, loadTaste, photosDb, newId, saveLesson } from '../lib/db'
-import { analyzeScene } from '../lib/claude'
+import { analyzeScene } from '../lib/ai'
+import { speak } from '../lib/voice'
 import { Spinner, ErrorText, Sheet, List, Lesson } from '../components'
 
 // Score limits: sahi pose ~95+ aata hai, milta-julta pose ~75-85. Isliye "Perfect" 90 se.
@@ -30,6 +31,10 @@ export default function Camera({ goTo }) {
   const [lastShot, setLastShot] = useState(null)
   const [flash, setFlash] = useState(false)
   const [taste, setTaste] = useState(null)
+  const [voiceOn, setVoiceOn] = useState(false) // 🔊 hints bol ke batao
+  const [autoOn, setAutoOn] = useState(false) // 🤖 pose match hote hi khud photo
+  const [countdown, setCountdown] = useState(null)
+  const coachRef = useRef({ since: 0, busy: false, lastText: '', lastAt: 0 })
 
   poseRef.current = pose
   const mirror = facing === 'user'
@@ -45,6 +50,42 @@ export default function Camera({ goTo }) {
     })
     loadTaste().then(setTaste)
   }, [])
+
+  // Voice coach + auto-capture: live score har ~250ms update hota hai, uspe react karo
+  useEffect(() => {
+    if (status || error) return
+    const c = coachRef.current
+    const now = Date.now()
+    const good = live.seen && live.score >= GOOD
+
+    if (voiceOn && !c.busy) {
+      const text = !live.seen ? 'Pura body frame mein lao' : good ? 'Perfect, aise hi raho' : live.hint || live.frame[0]
+      // Nayi baat ho toh 2.5 sec baad bolo, same baat ho toh 6 sec mein ek baar (warna kaan pak jaayenge)
+      if (text && now - c.lastAt > 2500 && (text !== c.lastText || now - c.lastAt > 6000)) {
+        speak(text); c.lastText = text; c.lastAt = now
+      }
+    }
+
+    if (autoOn && good && !c.busy) {
+      c.since ||= now
+      if (now - c.since > 800) { // 0.8 sec tak pose hold kiya -> countdown
+        c.busy = true
+        runCountdown()
+      }
+    } else if (!c.busy) c.since = 0
+  }, [live]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function runCountdown() {
+    for (const n of [3, 2, 1]) {
+      setCountdown(n)
+      if (voiceOn || autoOn) speak(String(n))
+      await new Promise((r) => setTimeout(r, 900))
+    }
+    setCountdown(null)
+    await shoot()
+    speak('Ho gaya')
+    setTimeout(() => { coachRef.current.busy = false; coachRef.current.since = 0 }, 3000) // 3 sec ka break, phir agli
+  }
 
   // Phone kitna tedha hai (level indicator)
   useEffect(() => {
@@ -176,6 +217,7 @@ export default function Camera({ goTo }) {
           {live.frame.map((h) => <div key={h} className="hud hud-small">{h}</div>)}
           {Math.abs(tilt) > 4 && Math.abs(tilt) < 60 && <div className="hud hud-small">📐 Phone tedha hai ({tilt}°): seedha pakdo</div>}
         </div>
+        {countdown && <div className="countdown">{countdown}</div>}
       </div>
 
       <div className="cam-panel">
@@ -188,6 +230,10 @@ export default function Camera({ goTo }) {
           ))}
         </div>
         <p className="small pose-tip">🧍 {pose.tip}<br />{FRAMING_TIPS[pose.framing]}</p>
+        <div className="chips">
+          <button className={'chip' + (voiceOn ? ' active' : '')} onClick={() => { setVoiceOn((v) => !v); speak(voiceOn ? '' : 'Voice coach on') }}>🔊 Voice coach</button>
+          <button className={'chip' + (autoOn ? ' active' : '')} onClick={() => setAutoOn((v) => !v)}>🤖 Auto photo (pose match pe)</button>
+        </div>
 
         <div className="cam-controls">
           <button className="round" onClick={() => setFacing((f) => (f === 'user' ? 'environment' : 'user'))} title="Camera badlo">🔄</button>

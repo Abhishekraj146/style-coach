@@ -1,9 +1,9 @@
 // Saara data phone ke andar hi IndexedDB mein save hota hai (koi server nahi).
 // idb-keyval = IndexedDB ka simple wrapper: get(key) / set(key, value).
-import { get, set } from 'idb-keyval'
+import { get, set, entries } from 'idb-keyval'
 
 const KEYS = {
-  settings: 'settings',     // { claudeKey, geminiKey, claudeModel, geminiModel }
+  settings: 'settings',     // { geminiKey, hfToken, textModel } (+ purane paid wale fields, ab use nahi hote)
   profile: 'profile',       // { photo, facePhoto, info, analysis }
   wardrobe: 'wardrobe',     // [ { id, image, tags, addedAt } ]
   outfits: 'outfits',       // [ { id, occasion, outfit, tryOnImage, createdAt } ]
@@ -13,10 +13,9 @@ const KEYS = {
 }
 
 export const DEFAULT_SETTINGS = {
-  claudeKey: '',
-  geminiKey: '',
-  claudeModel: 'claude-opus-5-5',
-  geminiModel: 'gemini-nano-banana-2.1',
+  geminiKey: '',                 // FREE: aistudio.google.com/apikey (Google account se)
+  hfToken: '',                   // optional FREE: huggingface.co token -> try-on ki daily limit badhti hai
+  textModel: 'gemini-3.8-flash', // free-tier model; limit khatam ho toh ai.js khud doosre free models try karta hai
 }
 
 export const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
@@ -66,3 +65,23 @@ export const lessonsDb = listStore('lessons') // [ { id, text, source, createdAt
 
 export const saveLesson = (text, source) =>
   text ? lessonsDb.add({ id: newId(), text, source, createdAt: Date.now() }) : null
+
+// ---------- Backup / Restore ----------
+// Settings (API keys) backup mein NAHI jaati: file Drive/WhatsApp pe jaayegi, keys wahan nahi honi chahiye.
+export async function exportAll() {
+  const data = {}
+  for (const [k, v] of await entries()) if (k !== KEYS.settings) data[k] = v
+  return { app: 'style-coach', version: 1, exportedAt: Date.now(), data }
+}
+
+// Restore: backup ka data wapas likho. Jo cheez backup mein nahi hai, use chhedte nahi (kuch delete nahi hota).
+export async function importAll(backup) {
+  if (backup?.app !== 'style-coach' || typeof backup.data !== 'object') throw new Error('Style Coach ki backup file nahi hai')
+  let n = 0
+  for (const [k, v] of Object.entries(backup.data)) {
+    if (k === KEYS.settings) continue
+    await set(k, v)
+    n += Array.isArray(v) ? v.length : 1
+  }
+  return n
+}

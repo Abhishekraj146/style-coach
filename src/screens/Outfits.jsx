@@ -2,8 +2,9 @@
 import { useEffect, useState } from 'react'
 import { ErrorText, Spinner, Lesson, List, Sheet } from '../components'
 import { wardrobeDb, outfitsDb, loadProfile, newId, saveLesson } from '../lib/db'
-import { suggestOutfits } from '../lib/claude'
-import { tryOn } from '../lib/gemini'
+import { suggestOutfits } from '../lib/ai'
+import { tryOn, pickUpperGarment } from '../lib/tryon'
+import { todayWeather } from '../lib/weather'
 
 const OCCASIONS = ['College', 'Date', 'Party / club', 'Wedding / festive', 'Office / interview', 'Casual outing', 'Travel', 'Family function']
 
@@ -40,11 +41,24 @@ export default function Outfits({ goTo }) {
     setLoading(false)
   }
 
+  async function addWeather() {
+    try {
+      const w = await todayWeather()
+      setNotes((n) => (n ? n + '. ' : '') + w)
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
   async function doTryOn(i, outfit) {
     if (!profile.photo) { setTryState((s) => ({ ...s, [i]: { error: 'Pehle "Me" tab mein apni full-body photo daalo.' } })); return }
-    setTryState((s) => ({ ...s, [i]: { loading: true } }))
+    setTryState((s) => ({ ...s, [i]: { loading: 'Shuru kar rahe hain…' } }))
     try {
-      const image = await tryOn({ personPhoto: profile.photo, items: outfit.item_ids.map((id) => byId[id]), styling: outfit.how_to_wear.join('; ') })
+      const { image } = await tryOn({
+        personPhoto: profile.photo,
+        items: outfit.item_ids.map((id) => byId[id]),
+        onStatus: (msg) => setTryState((s) => ({ ...s, [i]: { loading: msg } })), // live progress
+      })
       setTryState((s) => ({ ...s, [i]: { image } }))
     } catch (e) {
       setTryState((s) => ({ ...s, [i]: { error: e.message } }))
@@ -80,6 +94,7 @@ export default function Outfits({ goTo }) {
       </div>
       <input className="input" placeholder="Ya khud likho (e.g. dost ki birthday, rooftop cafe)" value={OCCASIONS.includes(occasion) ? '' : occasion} onChange={(e) => setOccasion(e.target.value)} />
       <input className="input" placeholder="Extra: mausam, din/raat, kaisa vibe chahiye…" value={notes} onChange={(e) => setNotes(e.target.value)} />
+      <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} onClick={addWeather}>📍 Aaj ka mausam add karo</button>
       {!profile.analysis && <p className="muted small">Tip: "Me" tab mein style profile banaoge toh suggestions tumhare skin tone aur body ke hisaab se aayenge.</p>}
       <button className="btn btn-block" disabled={!occasion || loading} onClick={suggest}>✨ Best combos batao</button>
 
@@ -108,10 +123,14 @@ export default function Outfits({ goTo }) {
               <p className="premium">💎 {o.premium_upgrade}</p>
 
               {tryState[i]?.image && <img className="tryon" src={tryState[i].image} alt="Try-on" onClick={() => setViewing(tryState[i].image)} />}
-              {tryState[i]?.loading && <Spinner text="Tumhe yeh pehna ke dekh rahe hain… (30-60 sec)" />}
+              {tryState[i]?.loading && <Spinner text={tryState[i].loading} />}
               <ErrorText error={tryState[i]?.error} />
+              {(() => {
+                const g = pickUpperGarment(o.item_ids.map((id) => byId[id]))
+                return g ? <p className="muted small">🪞 Free try-on sirf upper body ka: "{g.tags.name}" tum pe pehna ke dikhayega.</p> : null
+              })()}
               <div className="row">
-                <button className="btn btn-ghost" disabled={tryState[i]?.loading} onClick={() => doTryOn(i, o)}>🪞 {tryState[i]?.image ? 'Dobara try-on' : 'Mujh pe try karo'}</button>
+                <button className="btn btn-ghost" disabled={!!tryState[i]?.loading} onClick={() => doTryOn(i, o)}>🪞 {tryState[i]?.image ? 'Dobara try-on' : 'Mujh pe try karo'}</button>
                 <button className="btn btn-ghost" disabled={tryState[i]?.saved} onClick={() => save(i, o)}>{tryState[i]?.saved ? '✓ Saved' : '💾 Save'}</button>
               </div>
             </div>

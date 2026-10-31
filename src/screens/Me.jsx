@@ -1,8 +1,8 @@
 // Me: tumhari photo (try-on ke liye), style profile, API keys, aur ab tak ki saari seekh.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ImageButton, Spinner, ErrorText, List } from '../components'
-import { loadProfile, saveProfile, loadSettings, saveSettings, lessonsDb, saveLesson } from '../lib/db'
-import { analyzeProfile } from '../lib/claude'
+import { loadProfile, saveProfile, loadSettings, saveSettings, lessonsDb, saveLesson, exportAll, importAll } from '../lib/db'
+import { analyzeProfile } from '../lib/ai'
 
 export default function Me() {
   const [profile, setProfile] = useState({})
@@ -11,6 +11,8 @@ export default function Me() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [savedMsg, setSavedMsg] = useState('')
+  const [backupMsg, setBackupMsg] = useState('')
+  const restoreRef = useRef()
 
   useEffect(() => {
     loadProfile().then(setProfile)
@@ -44,13 +46,36 @@ export default function Me() {
   }
 
   const a = profile.analysis
-  const noKeys = settings && (!settings.claudeKey || !settings.geminiKey)
+  const noKeys = settings && !settings.geminiKey
+
+  async function doBackup() {
+    const json = JSON.stringify(await exportAll())
+    const file = new File([json], `style-coach-backup-${new Date().toISOString().slice(0, 10)}.json`, { type: 'application/json' })
+    if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file] }).catch(() => {})
+    else {
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(file); a.download = file.name; a.click()
+    }
+  }
+
+  async function doRestore(e) {
+    const f = e.target.files[0]
+    e.target.value = ''
+    if (!f) return
+    try {
+      const n = await importAll(JSON.parse(await f.text()))
+      setBackupMsg(`✓ ${n} cheezein wapas aa gayi. App reload ho raha hai…`)
+      setTimeout(() => location.reload(), 1200)
+    } catch (err) {
+      setBackupMsg('⚠️ Yeh backup file sahi nahi hai: ' + err.message)
+    }
+  }
 
   return (
     <div className="page">
       <h1>Me</h1>
 
-      {noKeys && <div className="card warn">🔑 Neeche Settings mein Claude aur Gemini API keys daalo, tabhi AI features chalenge.</div>}
+      {noKeys && <div className="card warn">🔑 AI features ke liye neeche Settings mein <b>free</b> Gemini key daalo (2 minute ka kaam, koi paisa nahi).</div>}
 
       <div className="card">
         <b>📸 Meri photos</b>
@@ -97,21 +122,32 @@ export default function Me() {
       {settings && (
         <div className="card">
           <b>⚙️ Settings</b>
-          <label>Claude API key <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">(yahan se lo)</a></label>
-          <input className="input" type="password" value={settings.claudeKey} onChange={(e) => setSettings({ ...settings, claudeKey: e.target.value.trim() })} placeholder="sk-ant-..." />
-          <label>Gemini API key <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">(yahan se lo)</a></label>
+          <label>Gemini API key (FREE) <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">→ yahan se lo</a></label>
           <input className="input" type="password" value={settings.geminiKey} onChange={(e) => setSettings({ ...settings, geminiKey: e.target.value.trim() })} placeholder="AIza..." />
+          <p className="muted small">Google account se login → "Create API key" → copy karke yahan paste. Card ki zaroorat nahi.</p>
+          <label>Hugging Face token (optional, FREE) <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer">→ yahan se lo</a></label>
+          <input className="input" type="password" value={settings.hfToken} onChange={(e) => setSettings({ ...settings, hfToken: e.target.value.trim() })} placeholder="hf_..." />
+          <p className="muted small">Bina iske bhi try-on chalta hai. Free token daaloge toh roz zyada try-on kar paoge.</p>
           <details>
-            <summary className="small">Advanced: models</summary>
-            <label>Claude model</label>
-            <input className="input" value={settings.claudeModel} onChange={(e) => setSettings({ ...settings, claudeModel: e.target.value.trim() })} />
-            <label>Gemini image model</label>
-            <input className="input" value={settings.geminiModel} onChange={(e) => setSettings({ ...settings, geminiModel: e.target.value.trim() })} />
+            <summary className="small">Advanced: AI model</summary>
+            <label>Free text model (pehle yeh try hoga)</label>
+            <input className="input" value={settings.textModel} onChange={(e) => setSettings({ ...settings, textModel: e.target.value.trim() })} />
           </details>
           <button className="btn btn-block" onClick={storeSettings}>{savedMsg || 'Save settings'}</button>
-          <p className="muted small">Keys sirf is phone ke andar save hoti hain. Is app ka link kisi ko mat dena.</p>
+          <p className="muted small">Keys sirf is phone ke andar save hoti hain, kahin upload nahi hoti.</p>
         </div>
       )}
+
+      <div className="card">
+        <b>💾 Backup</b>
+        <p className="muted small">Saara data (kapde, photos, profile, seekh) ek file mein save karo, Google Drive / WhatsApp pe khud ko bhej do. Phone badlo ya browser data clear ho jaaye, toh Restore se sab wapas.</p>
+        <div className="row">
+          <button className="btn btn-ghost" onClick={doBackup}>⬇️ Backup lo</button>
+          <button className="btn btn-ghost" onClick={() => restoreRef.current.click()}>⬆️ Restore</button>
+          <input ref={restoreRef} type="file" accept="application/json,.json" hidden onChange={doRestore} />
+        </div>
+        {backupMsg && <p className="small">{backupMsg}</p>}
+      </div>
     </div>
   )
 }

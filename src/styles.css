@@ -138,3 +138,5 @@ details { margin: 8px 0; }
 .round.thumb img { width: 100%; height: 100%; object-fit: cover; }
 .shutter { width: 70px; height: 70px; border-radius: 50%; background: #fff; border: 5px solid #555; box-shadow: 0 0 0 3px #fff; }
 .shutter:active { transform: scale(0.94); }
+.countdown { position: absolute; inset: 0; display: grid; place-items: center; font-size: 140px; font-weight: 800; color: #fff; text-shadow: 0 4px 30px #000; pointer-events: none; }
+.cam-panel .chips .chip { text-transform: none; }
