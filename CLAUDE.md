@@ -20,7 +20,8 @@ All AI is now free:
 - `claude.js` and `gemini.js` (paid) are kept but no longer imported. Don't delete them without asking.
 - Free extras: 🔊 voice coach and 🤖 auto-capture with a 3-2-1 countdown in Camera (`src/lib/voice.js`), 📍 weather via Open-Meteo in Outfits (`src/lib/weather.js`), 💾 backup/restore in Me (`exportAll`/`importAll` in db.js; settings/keys are never exported).
 - PWA: `public/sw.js` (cache `style-coach-v3`, precaches index.html and its assets at install, cache-first for MediaPipe CDN files), PNG icons, `base: './'` so the app works under a sub-path. Verified: SW active under /style-coach/, and the app opens offline with the server stopped.
-- Deploy: `.github/workflows/deploy.yml` builds and deploys to GitHub Pages on every push to `main`. The user chose GitHub Pages.
+- Deploy: `.github/workflows/deploy.yml` builds and deploys to GitHub Pages on every push to `main`.
+- **LIVE: https://abhishekraj146.github.io/style-coach/** (repo: github.com/Abhishekraj146/style-coach, public, Pages source = GitHub Actions). Pushing to `main` updates the phone app within ~1 min. The git remote `origin` is set and the GitHub login is saved in Git Credential Manager.
 
 Verified: build passes; pose math; MediaPipe loads; Gemini request shape and wrong-key error; live try-on; Open-Meteo response; backup round-trip with no key leak; offline load.
 Not verified yet: real Gemini answers (needs the user's free key); live camera, voice and auto-capture on a real phone.
