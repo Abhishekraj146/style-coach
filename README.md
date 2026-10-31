@@ -48,7 +48,9 @@ src/
     db.js             phone ke andar storage (IndexedDB) + backup/restore
     image.js          photos chhoti karna / format badalna
     poseDetector.js   MediaPipe: body ke 33 points dhoondna (offline)
-    poses.js          pose ki geometry: ghost, live compare, hints
+    poses.js          pose ki geometry: live compare, hints, selfie hand check
+    poseLibrary.js    51 original poses (front + back camera), categories
+    silhouette.js     pose ko insaan jaisi outline mein draw karna + thumbnails
     claude.js         (purana, paid: ab use nahi hota)
     gemini.js         (purana, paid try-on: ab use nahi hota)
 public/
@@ -60,7 +62,7 @@ public/
 **Ek feature end-to-end (try-on):** Outfits.jsx mein "Mujh pe try karo" → `doTryOn()` → `lib/tryon.js` ka `tryOn()` (tumhari photo + top ki photo, free IDM-VTON server ko) → progress `onStatus` se screen pe → image wapas → `tryState` → "Save" se `outfitsDb` (db.js) mein.
 
 ## Kahan kya badlein
-- Naye poses: `src/lib/poses.js` → `PRESET_POSES`
+- Naye poses: `src/lib/poseLibrary.js` → `POSE_LIBRARY` (ARM / LEG blocks se banao)
 - Stylist ka nazariya/rules: `src/lib/ai.js` → `STYLE_RULES`, `PHOTO_RULES`
 - Occasions list: `src/screens/Outfits.jsx` → `OCCASIONS`
 - Service worker badla? `public/sw.js` mein `CACHE` ka version badhao (v3 → v4)

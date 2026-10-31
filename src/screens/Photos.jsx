@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { ImageButton, Spinner, ErrorText, Sheet, List, Lesson } from '../components'
 import { referencesDb, photosDb, loadTaste, saveTaste, newId, saveLesson } from '../lib/db'
 import { buildTasteProfile, reviewPhoto } from '../lib/ai'
-import { detectPoseInImage } from '../lib/poseDetector'
+import { detectPoseAndOutline } from '../lib/poseDetector'
 import { poseFromLandmarks } from '../lib/poses'
 import { loadImage, dataUrlToBlob } from '../lib/image'
 
@@ -29,8 +29,9 @@ export default function Photos() {
       let pose = null
       try {
         const img = await loadImage(image)
-        const lm = await detectPoseInImage(img)
-        if (lm) pose = poseFromLandmarks(lm, img.width, img.height)
+        const { landmarks, outline } = await detectPoseAndOutline(img)
+        // outline = photo wale insaan ka asli shape -> Camera mein overlay hota hai
+        if (landmarks) pose = { ...poseFromLandmarks(landmarks, img.width, img.height), outline }
       } catch (e) {
         console.warn('pose detect fail', e) // pose na mile toh bhi photo taste ke liye kaam aayegi
       }
@@ -101,7 +102,7 @@ export default function Photos() {
 
       {tab === 'refs' && (
         <>
-          <p className="muted">Woh photos daalo jo tumhe "wow" lagti hain: apni ya kisi aur ki (Pinterest, Instagram screenshots). App inse seekhega ki tumhe kaisi photo pasand hai, aur inke pose Camera mein ghost ban jayenge.</p>
+          <p className="muted">Woh photos daalo jo tumhe "wow" lagti hain: apni ya kisi aur ki (Pinterest, Instagram screenshots). App inse seekhega ki tumhe kaisi photo pasand hai, aur photo wale insaan ki asli outline Camera pe aa jayegi: usme fit hoke click karo. Yeh photos sirf tumhare phone mein rehti hain.</p>
           <div className="row">
             <ImageButton label="＋ Pasand ki photos daalo" multiple onImages={addRefs} />
             <button className="btn btn-ghost" disabled={refs.length < 3 || !!busy} onClick={makeTaste}>🧠 Taste samjho</button>

@@ -10,55 +10,14 @@ const SH = [11, 12], EL = [13, 14], WR = [15, 16], HIP = [23, 24], KN = [25, 26]
 // Body ke hisso ki lambai, torso (kandhe se kamar) = 1 maan ke
 const LEN = { upperArm: 0.6, forearm: 0.55, thigh: 0.85, shin: 0.8, head: 0.38 }
 
-export const PRESET_POSES = [
-  {
-    id: 'p-classic',
-    name: 'Classic confident stand',
-    framing: 'full',
-    tip: 'Ek haath pocket mein (sirf ungliyan), wajan peeche wale pair pe, body camera se 20-30° ghumi hui, chin thoda aage-neeche.',
-    angles: { torso: -90, sw: 0.6, LupperArm: 100, Lforearm: 60, RupperArm: 84, Rforearm: 92, Lthigh: 93, Lshin: 91, Rthigh: 80, Rshin: 97 },
-  },
-  {
-    id: 'p-pockets',
-    name: 'Dono haath pocket',
-    framing: 'full',
-    tip: 'Dono thumbs bahar ya dono haath halke se pocket mein. Kandhe relaxed, ek ghutna thoda mudha hua.',
-    angles: { torso: -90, sw: 0.75, LupperArm: 102, Lforearm: 62, RupperArm: 78, Rforearm: 118, Lthigh: 94, Lshin: 90, Rthigh: 84, Rshin: 96 },
-  },
-  {
-    id: 'p-walk',
-    name: 'Walking shot',
-    framing: 'full',
-    tip: 'Camera ki taraf dheere chalo, camera ko mat dekho. Photographer burst mode mein 10 photo le, beech wali best hogi.',
-    angles: { torso: -88, sw: 0.7, LupperArm: 96, Lforearm: 80, RupperArm: 80, Rforearm: 100, Lthigh: 106, Lshin: 98, Rthigh: 74, Rshin: 96 },
-  },
-  {
-    id: 'p-lean',
-    name: 'Wall lean, legs crossed',
-    framing: 'full',
-    tip: 'Kandha deewar se tikao, aage wala pair peeche wale ke upar cross. Haath pocket mein ya arms cross.',
-    angles: { torso: -97, sw: 0.55, LupperArm: 100, Lforearm: 65, RupperArm: 82, Rforearm: 110, Lthigh: 86, Lshin: 78, Rthigh: 96, Rshin: 102 },
-  },
-  {
-    id: 'p-collar',
-    name: 'Collar / jacket adjust',
-    framing: 'half',
-    tip: 'Ek haath se collar ya jacket ka lapel pakdo, nazar side mein ya neeche. Natural "candid" feel aata hai.',
-    angles: { torso: -90, sw: 0.65, LupperArm: 95, Lforearm: 88, RupperArm: 100, Rforearm: -100, Lthigh: 92, Lshin: 90, Rthigh: 88, Rshin: 90 },
-  },
-  {
-    id: 'p-watch',
-    name: 'Watch / cuff check',
-    framing: 'half',
-    tip: 'Ek haath se doosre haath ki cuff ya watch adjust karo, nazar neeche haath pe. Premium editorial look.',
-    angles: { torso: -90, sw: 0.7, LupperArm: 90, Lforearm: -30, RupperArm: 95, Rforearm: -125, Lthigh: 92, Lshin: 90, Rthigh: 88, Rshin: 90 },
-  },
-]
+// 51 poses ab poseLibrary.js mein hain (pehle wale 6 bhi wahin, same id ke saath)
+import { POSE_LIBRARY } from './poseLibrary'
+export const PRESET_POSES = POSE_LIBRARY
 
 export const FRAMING_TIPS = {
   full: 'Photographer: phone kamar (waist) ki height pe, halka sa upar tilt. 3-4 kadam door, 2x zoom. Isse legs lambi aur body proportion sahi aata hai.',
   half: 'Photographer: phone chest/aankh ki height pe, seedha. 2-3 kadam door, 2x zoom (paas aake wide lens se face mota dikhta hai).',
-  close: 'Photographer: aankh ki height pe ya thoda upar. 2x-3x zoom, background blur ke liye portrait mode.',
+  close: 'Selfie: phone aankh se thoda upar, haath poora seedha (paas se chehra mota dikhta hai). 0.5x mat use karo. Light (khidki / sun) chehre ke saamne ho, peeche nahi.',
 }
 
 const rad = (d) => (d * Math.PI) / 180
@@ -70,6 +29,8 @@ const angleDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180)
 
 // Angles -> skeleton points (unit space). Phir isko screen pe fit karte hain.
 export function skeletonFromAngles(A) {
+  const k = A.k || {} // lambai multiplier (haath camera ki taraf ho toh chhota dikhta hai)
+  const L = (seg, base) => base * (k[seg] ?? 1)
   const hip = { x: 0, y: 0 }
   const shoulder = add(hip, A.torso, 1)
   const perp = A.torso + 90 // torso ke perpendicular (left-right)
@@ -84,14 +45,14 @@ export function skeletonFromAngles(A) {
   // perp = torso+90 = 0° jab torso -90 ho, yaani "right". L side ke liye ulta chahiye:
   ;[pts.LShoulder, pts.RShoulder] = [pts.RShoulder, pts.LShoulder]
   ;[pts.LHip, pts.RHip] = [pts.RHip, pts.LHip]
-  pts.LElbow = add(pts.LShoulder, A.LupperArm, LEN.upperArm)
-  pts.LWrist = add(pts.LElbow, A.Lforearm, LEN.forearm)
-  pts.RElbow = add(pts.RShoulder, A.RupperArm, LEN.upperArm)
-  pts.RWrist = add(pts.RElbow, A.Rforearm, LEN.forearm)
-  pts.LKnee = add(pts.LHip, A.Lthigh, LEN.thigh)
-  pts.LAnkle = add(pts.LKnee, A.Lshin, LEN.shin)
-  pts.RKnee = add(pts.RHip, A.Rthigh, LEN.thigh)
-  pts.RAnkle = add(pts.RKnee, A.Rshin, LEN.shin)
+  pts.LElbow = add(pts.LShoulder, A.LupperArm, L('LupperArm', LEN.upperArm))
+  pts.LWrist = add(pts.LElbow, A.Lforearm, L('Lforearm', LEN.forearm))
+  pts.RElbow = add(pts.RShoulder, A.RupperArm, L('RupperArm', LEN.upperArm))
+  pts.RWrist = add(pts.RElbow, A.Rforearm, L('Rforearm', LEN.forearm))
+  pts.LKnee = add(pts.LHip, A.Lthigh, L('Lthigh', LEN.thigh))
+  pts.LAnkle = add(pts.LKnee, A.Lshin, L('Lshin', LEN.shin))
+  pts.RKnee = add(pts.RHip, A.Rthigh, L('Rthigh', LEN.thigh))
+  pts.RAnkle = add(pts.RKnee, A.Rshin, L('Rshin', LEN.shin))
   return pts
 }
 
@@ -102,22 +63,30 @@ export const BONES = [
 ]
 
 // Unit skeleton ko screen (W x H pixels) pe framing ke hisaab se fit karo
+//   full  = sar se pair tak | half = sar se kamar tak | close = selfie (sar + kandhe, kohni tak)
+const FIT = {
+  full: { keys: null, top: 0.1, bottom: 0.9 },
+  half: { keys: /^(head|.*Shoulder|.*Elbow|.*Wrist|.*Hip)$/, top: 0.14, bottom: 0.97 },
+  close: { keys: /^(head|.*Shoulder)$/, top: 0.2, bottom: 0.62 },
+}
 export function fitSkeleton(pts, framing, W, H) {
-  const keys = framing === 'full' ? Object.keys(pts) : Object.keys(pts).filter((k) => !/Knee|Ankle/.test(k))
+  const f = FIT[framing] || FIT.full
+  const keys = Object.keys(pts).filter((k) => !f.keys || f.keys.test(k))
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
   for (const k of keys) {
     minX = Math.min(minX, pts[k].x); maxX = Math.max(maxX, pts[k].x)
     minY = Math.min(minY, pts[k].y); maxY = Math.max(maxY, pts[k].y)
   }
   minY -= 0.2 // sir ka upar wala hissa
-  const target = framing === 'full' ? { top: 0.1, bottom: 0.9 } : { top: 0.14, bottom: 0.97 }
-  const scale = ((target.bottom - target.top) * H) / (maxY - minY)
-  const cx = (minX + maxX) / 2
+  const scale = ((f.bottom - f.top) * H) / (maxY - minY)
+  // full: poore figure ka center; half/close: body ki beech wali line (selfie mein phone wala haath bahar jaata hai)
+  const cx = framing === 'full' ? (minX + maxX) / 2 : (pts.LShoulder.x + pts.RShoulder.x) / 2
   const out = {}
   for (const k of Object.keys(pts)) {
-    out[k] = { x: W / 2 + (pts[k].x - cx) * scale, y: target.top * H + (pts[k].y - minY) * scale }
+    out[k] = { x: W / 2 + (pts[k].x - cx) * scale, y: f.top * H + (pts[k].y - minY) * scale }
   }
   out.headRadius = 0.2 * scale
+  out.scale = scale
   return out
 }
 
@@ -154,18 +123,27 @@ const SEGMENTS = {
   Rshin: ['RKnee', 'RAnkle', 'Screen-right wala pair'],
 }
 
-export function anglesFromPoints(p) {
-  const hip = mid(p.LHip, p.RHip)
+// useHead = selfie: kamar frame mein nahi hoti, toh body ka angle "kandhe -> sar" se naapte hain
+// (ghost mein sar hamesha torso ki line pe hi hai, isliye dono tareeke same angle dete hain)
+export function anglesFromPoints(p, useHead = false) {
   const sh = mid(p.LShoulder, p.RShoulder)
-  const torsoLen = Math.hypot(sh.x - hip.x, sh.y - hip.y) || 1
-  const A = { torso: angleOf(hip, sh), sw: Math.hypot(p.LShoulder.x - p.RShoulder.x, p.LShoulder.y - p.RShoulder.y) / torsoLen }
+  let torso, torsoLen
+  if (useHead) {
+    torso = angleOf(sh, p.head)
+    torsoLen = Math.hypot(p.head.x - sh.x, p.head.y - sh.y) / LEN.head || 1
+  } else {
+    const hip = mid(p.LHip, p.RHip)
+    torso = angleOf(hip, sh)
+    torsoLen = Math.hypot(sh.x - hip.x, sh.y - hip.y) || 1
+  }
+  const A = { torso, sw: Math.hypot(p.LShoulder.x - p.RShoulder.x, p.LShoulder.y - p.RShoulder.y) / torsoLen }
   for (const [k, [from, to]] of Object.entries(SEGMENTS)) A[k] = angleOf(p[from], p[to])
   return A
 }
 
 // Live pose vs target pose: score (0-100) + sabse badi galti ka hint
 export function comparePose(live, target, framing) {
-  const A = anglesFromPoints(live)
+  const A = anglesFromPoints(live, framing === 'close')
   const T = target
   let total = 0, weight = 0, worst = null
   const segs = Object.entries(SEGMENTS).filter(([k]) => framing === 'full' || !/thigh|shin/.test(k))
@@ -180,10 +158,25 @@ export function comparePose(live, target, framing) {
   const torsoD = angleDiff(A.torso, T.torso)
   total += Math.max(0, 1 - torsoD / 20)
   weight += 1
+  // Body kitni ghumi hai (saamne vs side): 0.3 ka farak = 0 score
+  const swD = Math.abs(A.sw - T.sw)
+  total += Math.max(0, 1 - swD / 0.3)
+  weight += 1
+
+  // Selfie: kohni aksar frame ke bahar hoti hai, isliye haath ki JAGAH (chehre/kandhe ke hisaab se) check karo
+  let handHint = null
+  if (framing === 'close') {
+    const h = selfieHands(live, A, target)
+    total += h.total
+    weight += h.weight
+    handHint = h.hint
+  }
 
   const score = weight ? Math.round((total / weight) * 100) : 0
   let hint = null
-  if (worst) {
+  if (handHint) {
+    hint = handHint
+  } else if (worst) {
     // Target angle se joint kahan hona chahiye tha, vs abhi kahan hai
     const len = Math.hypot(live[worst.to].x - live[worst.from].x, live[worst.to].y - live[worst.from].y)
     const want = add(live[worst.from], T[worst.k], len)
@@ -203,6 +196,7 @@ export function comparePose(live, target, framing) {
 
 // Photographer ke liye: frame mein banda sahi jagah hai ya nahi
 export function framingHints(p, framing, W, H) {
+  if (framing === 'close') return selfieHints(p, W, H)
   const hints = []
   const top = (p.head.y - 0.09 * H) / H // naak se thoda upar = sir ka top (approx)
   const anklesSeen = p.LAnkle.v > 0.5 && p.RAnkle.v > 0.5 && Math.max(p.LAnkle.y, p.RAnkle.y) < H * 0.98
@@ -222,9 +216,63 @@ export function framingHints(p, framing, W, H) {
   return hints
 }
 
+// Selfie mein har haath: target mein haath frame mein (chehre ke paas) hai ya neeche/bahar?
+// Position kandhon ke beech ke point se, torso-length units mein (isse door/paas hone se farak nahi padta).
+function selfieHands(live, A, target) {
+  const T = skeletonFromAngles(target)
+  const tMid = mid(T.LShoulder, T.RShoulder)
+  const lMid = mid(live.LShoulder, live.RShoulder)
+  const unit = Math.hypot(live.head.x - lMid.x, live.head.y - lMid.y) / LEN.head || 1
+  let total = 0, weight = 0, hint = null
+  for (const side of ['L', 'R']) {
+    const label = side === 'L' ? 'Screen-left wala haath' : 'Screen-right wala haath'
+    const tw = { x: T[side + 'Wrist'].x - tMid.x, y: T[side + 'Wrist'].y - tMid.y }
+    const lw = live[side + 'Wrist']
+    const lv = { x: (lw.x - lMid.x) / unit, y: (lw.y - lMid.y) / unit }
+    const targetIn = Math.abs(tw.x) < 0.45 && tw.y < 0.55 // target mein haath selfie frame ke andar
+    const liveIn = lw.v > 0.5 && lv.y < 0.55
+    let sc = 1
+    if (targetIn && liveIn) {
+      const d = Math.hypot(tw.x - lv.x, tw.y - lv.y)
+      sc = Math.max(0, 1 - d / 0.6)
+      if (d > 0.25 && !hint) {
+        const dx = tw.x - lv.x, dy = tw.y - lv.y
+        hint = `${label} ` + (Math.abs(dy) > Math.abs(dx) ? (dy < 0 ? 'thoda upar karo' : 'thoda neeche karo') : dx < 0 ? 'screen ke left le jao' : 'screen ke right le jao')
+      }
+    } else if (targetIn && !liveIn) {
+      sc = 0
+      hint ||= `${label} upar lao (chehre / kandhe ke paas)`
+    } else if (!targetIn && liveIn && lv.y < 0.3) {
+      sc = 0.3
+      hint ||= `${label} neeche karo (frame se bahar)`
+    }
+    total += sc * 1.5 // selfie mein haath hi pose ka main farak hai, isliye zyada weight
+    weight += 1.5
+  }
+  return { total, weight, hint }
+}
+
+// Selfie (front camera): chehra sahi size + jagah pe ho, kandhe dikhen
+function selfieHints(p, W, H) {
+  const hints = []
+  const shouldersSeen = p.LShoulder.v > 0.5 && p.RShoulder.v > 0.5
+  if (!shouldersSeen) return ['📱 Phone thoda door karo: kandhe bhi frame mein aane chahiye']
+  const midY = (p.LShoulder.y + p.RShoulder.y) / 2
+  const face = (midY - p.head.y) / H // naak se kandhe tak = chehre ka size
+  const cx = (p.LShoulder.x + p.RShoulder.x) / 2 / W
+  if (p.head.y / H < 0.12) hints.push('📱 Sir kat raha hai: phone thoda neeche ya door karo')
+  if (face > 0.4) hints.push('📱 Bahut paas hai (chehra mota dikhega): haath seedha karke phone door karo')
+  else if (face < 0.16) hints.push('📱 Bahut door hai: phone thoda paas lao')
+  if (p.head.y / H > 0.5) hints.push('📱 Phone aankh se thoda upar rakho (neeche se angle achha nahi lagta)')
+  if (Math.abs(cx - 0.5) > 0.15) hints.push(cx < 0.5 ? '📱 Phone thoda left le jao' : '📱 Phone thoda right le jao')
+  return hints
+}
+
 // Pasand ki photo se custom pose banao
 export function poseFromLandmarks(landmarks, imgW, imgH) {
   const p = namedPoints(landmarks, imgW, imgH, false)
   const anklesSeen = p.LAnkle.v > 0.5 && p.RAnkle.v > 0.5
-  return { angles: anglesFromPoints(p), framing: anklesSeen ? 'full' : 'half' }
+  const hipsSeen = p.LHip.v > 0.5 && p.RHip.v > 0.5
+  const framing = anklesSeen ? 'full' : hipsSeen ? 'half' : 'close' // kamar bhi nahi dikhi = selfie
+  return { angles: anglesFromPoints(p, framing === 'close'), framing }
 }

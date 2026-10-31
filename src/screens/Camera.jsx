@@ -3,7 +3,9 @@
 //       -> canvas pe ghost (target) + tumhara skeleton draw -> hints update.
 import { useEffect, useRef, useState } from 'react'
 import { getVideoLandmarker } from '../lib/poseDetector'
-import { PRESET_POSES, FRAMING_TIPS, BONES, skeletonFromAngles, fitSkeleton, namedPoints, comparePose, framingHints } from '../lib/poses'
+import { PRESET_POSES, FRAMING_TIPS, BONES, namedPoints, comparePose, framingHints } from '../lib/poses'
+import { CATEGORIES } from '../lib/poseLibrary'
+import { drawFigure, drawPhotoOverlay, poseThumb } from '../lib/silhouette'
 import { referencesDb, loadTaste, photosDb, newId, saveLesson } from '../lib/db'
 import { analyzeScene } from '../lib/ai'
 import { speak } from '../lib/voice'
@@ -19,8 +21,10 @@ export default function Camera({ goTo }) {
   const boxRef = useRef()
   const poseRef = useRef(null) // loop ke andar latest pose padhne ke liye (state loop mein stale ho jaata)
   const [facing, setFacing] = useState('environment') // back camera = dost click kar raha hai
-  const [poses, setPoses] = useState(PRESET_POSES)
+  const [allPoses, setAllPoses] = useState(PRESET_POSES)
   const [pose, setPose] = useState(PRESET_POSES[0])
+  const [picker, setPicker] = useState(false) // pose chunne wali sheet
+  const [cat, setCat] = useState('all')
   const [grid, setGrid] = useState(true)
   const [live, setLive] = useState({ score: 0, hint: null, frame: [], seen: false })
   const [status, setStatus] = useState('Camera khul raha hai…')
@@ -38,15 +42,32 @@ export default function Camera({ goTo }) {
 
   poseRef.current = pose
   const mirror = facing === 'user'
+  // Selfie poses sirf front camera pe; baaki sab dono pe (front camera + phone tika ke bhi full-body le sakte ho)
+  const poses = allPoses.filter((p) => mirror || p.camera !== 'front')
+  const idx = Math.max(0, poses.findIndex((p) => p.id === pose.id))
+  const step = (d) => setPose(poses[(idx + d + poses.length) % poses.length])
+
+  function flipCamera() {
+    const toFront = !mirror
+    setFacing(toFront ? 'user' : 'environment')
+    // Front pe jaate hi selfie pose, back pe aate hi normal pose
+    if (toFront && pose.camera !== 'front') setPose(allPoses.find((p) => p.cat === 'selfie') || pose)
+    if (!toFront && pose.camera === 'front') setPose(allPoses.find((p) => p.id === 'p-classic'))
+  }
 
   // Pasand ki photos se bane custom poses bhi list mein jodo
   useEffect(() => {
     referencesDb.load().then((refs) => {
-      const custom = refs.filter((r) => r.pose).map((r, i) => ({
-        id: r.id, name: `Meri pasand #${refs.length - i}`, framing: r.pose.framing, angles: r.pose.angles,
-        tip: 'Tumhari pasand ki photo wala pose. Thumbnail dekh ke copy karo.', thumb: r.image,
-      }))
-      setPoses([...custom, ...PRESET_POSES])
+      const custom = refs.filter((r) => r.pose).map((r, i) => {
+        let outlineImg = null
+        if (r.pose.outline) { outlineImg = new Image(); outlineImg.src = r.pose.outline.src } // pehle se load
+        return {
+          id: r.id, name: `Meri pasand #${refs.length - i}`, cat: 'mine', camera: 'any', framing: r.pose.framing, angles: r.pose.angles,
+          tip: 'Tumhari pasand ki photo wala pose. Screen pe usi insaan ki outline hai: usme fit ho jao.', thumb: r.image,
+          outline: r.pose.outline, outlineImg,
+        }
+      })
+      setAllPoses([...custom, ...PRESET_POSES])
     })
     loadTaste().then(setTaste)
   }, [])
@@ -59,7 +80,7 @@ export default function Camera({ goTo }) {
     const good = live.seen && live.score >= GOOD
 
     if (voiceOn && !c.busy) {
-      const text = !live.seen ? 'Pura body frame mein lao' : good ? 'Perfect, aise hi raho' : live.hint || live.frame[0]
+      const text = !live.seen ? (pose.framing === 'close' ? 'Chehra aur kandhe frame mein lao' : 'Pura body frame mein lao') : good ? 'Perfect, aise hi raho' : live.hint || live.frame[0]
       // Nayi baat ho toh 2.5 sec baad bolo, same baat ho toh 6 sec mein ek baar (warna kaan pak jaayenge)
       if (text && now - c.lastAt > 2500 && (text !== c.lastText || now - c.lastAt > 6000)) {
         speak(text); c.lastText = text; c.lastAt = now
@@ -207,10 +228,10 @@ export default function Camera({ goTo }) {
               {live.seen ? (
                 <>
                   <span className={'score ' + scoreClass}>{live.score}%</span>
-                  <span className="hud-text">{live.score >= GOOD ? '🔥 Perfect! Ab click karo' : live.hint || 'Ghost outline ke saath match karo'}</span>
+                  <span className="hud-text">{live.score >= GOOD ? '🔥 Perfect! Ab click karo' : live.hint || 'Outline ke saath match karo'}</span>
                 </>
               ) : (
-                <span className="hud-text">Pura banda frame mein lao, ghost outline dikh raha hai</span>
+                <span className="hud-text">{pose.framing === 'close' ? 'Chehra aur kandhe frame mein lao' : 'Pura banda frame mein lao'}, outline ke andar fit ho jao</span>
               )}
             </div>
           )}
@@ -221,13 +242,13 @@ export default function Camera({ goTo }) {
       </div>
 
       <div className="cam-panel">
-        <div className="pose-strip">
-          {poses.map((p) => (
-            <button key={p.id} className={'pose-chip' + (p.id === pose.id ? ' active' : '')} onClick={() => setPose(p)}>
-              {p.thumb && <img src={p.thumb} alt="" />}
-              <span>{p.name}</span>
-            </button>
-          ))}
+        <div className="pose-pick">
+          <button className="round" onClick={() => step(-1)} aria-label="Pichhla pose">◀</button>
+          <button className="pose-current" onClick={() => setPicker(true)}>
+            <img src={pose.thumb || poseThumb(pose)} alt="" />
+            <span><b>{pose.name}</b><small>{idx + 1}/{poses.length} · saare poses dekho ▾</small></span>
+          </button>
+          <button className="round" onClick={() => step(1)} aria-label="Agla pose">▶</button>
         </div>
         <p className="small pose-tip">🧍 {pose.tip}<br />{FRAMING_TIPS[pose.framing]}</p>
         <div className="chips">
@@ -236,7 +257,7 @@ export default function Camera({ goTo }) {
         </div>
 
         <div className="cam-controls">
-          <button className="round" onClick={() => setFacing((f) => (f === 'user' ? 'environment' : 'user'))} title="Camera badlo">🔄</button>
+          <button className="round" onClick={flipCamera} title="Camera badlo (front / back)">🔄</button>
           <button className="round" onClick={() => setGrid((g) => !g)} title="Grid">#</button>
           <button className="shutter" onClick={shoot} disabled={!cameraReady} aria-label="Photo lo" />
           <button className="round" onClick={analyze} disabled={sceneLoading || !cameraReady} title="Scene analyze">{sceneLoading ? '…' : '🧠'}</button>
@@ -245,6 +266,28 @@ export default function Camera({ goTo }) {
           </button>
         </div>
       </div>
+
+      {picker && (
+        <Sheet onClose={() => setPicker(false)}>
+          <h2>Pose chuno <small className="muted">({poses.length})</small></h2>
+          <div className="chips">
+            {[{ id: 'all', label: 'Sab' }, ...(poses.some((p) => p.cat === 'mine') ? [{ id: 'mine', label: '⭐ Meri pasand' }] : []), ...CATEGORIES]
+              .filter((c) => c.id === 'all' || poses.some((p) => p.cat === c.id))
+              .map((c) => (
+                <button key={c.id} className={'chip' + (cat === c.id ? ' active' : '')} onClick={() => setCat(c.id)}>{c.label}</button>
+              ))}
+          </div>
+          <div className="pose-grid">
+            {poses.filter((p) => cat === 'all' || p.cat === cat).map((p) => (
+              <button key={p.id} className={'pose-tile' + (p.id === pose.id ? ' active' : '')} onClick={() => { setPose(p); setPicker(false) }}>
+                <img src={p.thumb || poseThumb(p)} alt="" />
+                <span>{p.name}</span>
+              </button>
+            ))}
+          </div>
+          {!mirror && <p className="muted small">Selfie poses dekhne ke liye 🔄 se front camera pe jao.</p>}
+        </Sheet>
+      )}
 
       {scene && (
         <Sheet onClose={() => setScene(null)}>
@@ -274,24 +317,17 @@ function toDisplay(lm, video, W, H) {
 
 function draw(ctx, W, H, pose, pts, score) {
   ctx.clearRect(0, 0, W, H)
-  // 1. Ghost (target pose)
-  const g = fitSkeleton(skeletonFromAngles(pose.angles), pose.framing, W, H)
-  ctx.lineCap = 'round'
-  ctx.strokeStyle = 'rgba(255,255,255,0.55)'
-  ctx.lineWidth = Math.max(10, W / 28)
-  ctx.setLineDash([])
-  for (const [a, b] of BONES) {
-    if (pose.framing !== 'full' && /Knee|Ankle/.test(b)) continue
-    ctx.beginPath(); ctx.moveTo(g[a].x, g[a].y); ctx.lineTo(g[b].x, g[b].y); ctx.stroke()
-  }
-  ctx.beginPath(); ctx.arc(g.head.x, g.head.y, g.headRadius, 0, Math.PI * 2)
-  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fill()
+  // 1. Target pose: photo wala ho toh us insaan ki asli outline, warna body silhouette.
+  //    Pose match hote hi outline hari ho jaati hai.
+  if (pose.outline && pose.outlineImg?.complete) drawPhotoOverlay(ctx, W, H, pose.outline, pose.outlineImg, pose.framing)
+  else drawFigure(ctx, W, H, pose, score >= GOOD ? '#3ddc84' : '#ffffff', 0.85)
 
-  // 2. Live skeleton (tum) - colour score ke hisaab se
+  // 2. Live skeleton (tum): patli lines, colour score ke hisaab se
   if (!pts) return
   const color = score >= GOOD ? '#3ddc84' : score >= OK ? '#e8c27a' : '#ff6b6b'
+  ctx.lineCap = 'round'
   ctx.strokeStyle = color
-  ctx.lineWidth = 4
+  ctx.lineWidth = 3
   for (const [a, b] of BONES) {
     if (pts[a].v < 0.5 || pts[b].v < 0.5) continue
     ctx.beginPath(); ctx.moveTo(pts[a].x, pts[a].y); ctx.lineTo(pts[b].x, pts[b].y); ctx.stroke()
